@@ -1,0 +1,275 @@
+import java.io.*;
+import java.util.*;
+
+// ====== USERS ======
+abstract class User implements Serializable {
+    protected String id;
+    protected String name;
+
+    public User(String id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    public abstract void displayInfo();
+
+    public String getId() { return id; }
+    public String getName() { return name; }
+}
+
+class Student extends User {
+    private final List<Enrollment> enrollments = new ArrayList<>();
+
+    public Student(String id, String name) {
+        super(id, name);
+    }
+
+    @Override
+    public void displayInfo() {
+        System.out.println("Student ID: " + id + ", Name: " + name);
+        if (enrollments.isEmpty()) System.out.println("  No enrollments yet.");
+        for (Enrollment e : enrollments) {
+            System.out.println("  " + e);
+        }
+    }
+
+    public void addEnrollment(Enrollment e) { enrollments.add(e); }
+    public List<Enrollment> getEnrollments() { return enrollments; }
+}
+
+class Professor extends User {
+    private final List<Course> coursesTeaching = new ArrayList<>();
+
+    public Professor(String id, String name) {
+        super(id, name);
+    }
+
+    @Override
+    public void displayInfo() {
+        System.out.println("Professor ID: " + id + ", Name: " + name);
+        if (coursesTeaching.isEmpty()) System.out.println("  No courses assigned.");
+        for (Course c : coursesTeaching) {
+            System.out.println("  " + c.getCourseName());
+        }
+    }
+
+    public void addCourse(Course c) { coursesTeaching.add(c); }
+}
+
+// ====== COURSES & ENROLLMENTS ======
+class Course implements Serializable {
+    private final String courseId;
+    private final String courseName;
+    private final Professor professor;
+
+    public Course(String courseId, String courseName, Professor professor) {
+        this.courseId = courseId;
+        this.courseName = courseName;
+        this.professor = professor;
+        professor.addCourse(this);
+    }
+
+    public String getCourseName() { return courseName; }
+    public Professor getProfessor() { return professor; }
+
+    @Override
+    public String toString() {
+        return courseId + ": " + courseName + " (Prof. " + professor.getName() + ")";
+    }
+}
+
+class Enrollment implements Serializable {
+    private final Course course;
+    private double grade = -1;
+
+    public Enrollment(Student student, Course course) {
+        this.course = course;
+        student.addEnrollment(this);
+    }
+
+    public void assignGrade(double grade) { this.grade = grade; }
+    public double getGrade() { return grade; }
+
+    @Override
+    public String toString() {
+        return course.getCourseName() + " | Grade: " + (grade >= 0 ? grade : "Not assigned");
+    }
+}
+
+// ====== NOTIFICATIONS ======
+interface Notification {
+    void send(String message);
+}
+
+class EmailNotification implements Notification {
+    @Override
+    public void send(String message) {
+        System.out.println("Email sent: " + message);
+    }
+}
+
+class SMSNotification implements Notification {
+    @Override
+    public void send(String message) {
+        System.out.println("SMS sent: " + message);
+    }
+}
+
+// ====== FILE PERSISTENCE ======
+class FileManager {
+    public static void save(Object obj, String filename) {
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(filename))) {
+            oos.writeObject(obj);
+        } catch (IOException e) {
+            System.out.println("Error saving " + filename + ": " + e.getMessage());
+        }
+    }
+
+    public static Object load(String filename) {
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filename))) {
+            return ois.readObject();
+        } catch (IOException | ClassNotFoundException e) {
+            // File may not exist on first run
+            return null;
+        }
+    }
+}
+
+// ====== MAIN APPLICATION ======
+public class UniversityApp {
+    private static final Scanner scanner = new Scanner(System.in);
+
+    private static List<Student> students = new ArrayList<>();
+    private static List<Professor> professors = new ArrayList<>();
+    private static List<Course> courses = new ArrayList<>();
+
+    public static void main(String[] args) {
+        loadData();
+        mainMenu();
+        saveData();
+    }
+
+    private static void mainMenu() {
+        while (true) {
+            System.out.println("\n--- University Management ---");
+            System.out.println("1. Add Student");
+            System.out.println("2. Add Professor");
+            System.out.println("3. Add Course");
+            System.out.println("4. Enroll Student");
+            System.out.println("5. Assign Grade");
+            System.out.println("6. Display Users");
+            System.out.println("7. Exit");
+            System.out.print("Choice: ");
+            String choice = scanner.nextLine();
+
+            switch (choice) {
+                case "1" -> addStudent();
+                case "2" -> addProfessor();
+                case "3" -> addCourse();
+                case "4" -> enrollStudent();
+                case "5" -> assignGrade();
+                case "6" -> displayUsers();
+                case "7" -> {
+                    return;
+                }
+                default -> System.out.println("Invalid choice.");
+            }
+        }
+    }
+
+    private static void addStudent() {
+        System.out.print("Student ID: ");
+        String id = scanner.nextLine();
+        System.out.print("Name: ");
+        String name = scanner.nextLine();
+        students.add(new Student(id, name));
+        System.out.println("Student added.");
+    }
+
+    private static void addProfessor() {
+        System.out.print("Professor ID: ");
+        String id = scanner.nextLine();
+        System.out.print("Name: ");
+        String name = scanner.nextLine();
+        professors.add(new Professor(id, name));
+        System.out.println("Professor added.");
+    }
+
+    private static void addCourse() {
+        System.out.print("Course ID: ");
+        String id = scanner.nextLine();
+        System.out.print("Course Name: ");
+        String name = scanner.nextLine();
+        System.out.print("Professor ID: ");
+        String pid = scanner.nextLine();
+        Professor prof = professors.stream().filter(p -> p.getId().equals(pid)).findFirst().orElse(null);
+        if (prof == null) { System.out.println("Professor not found."); return; }
+        courses.add(new Course(id, name, prof));
+        System.out.println("Course added.");
+    }
+
+    private static void enrollStudent() {
+        System.out.print("Student ID: ");
+        String sid = scanner.nextLine();
+        Student s = students.stream().filter(st -> st.getId().equals(sid)).findFirst().orElse(null);
+        if (s == null) { System.out.println("Student not found."); return; }
+
+        System.out.print("Course ID: ");
+        String cid = scanner.nextLine();
+        Course c = courses.stream().filter(co -> co.toString().startsWith(cid)).findFirst().orElse(null);
+        if (c == null) { System.out.println("Course not found."); return; }
+        //<editor-fold defaultstate="collapsed" desc="comment">
+
+        System.out.println("Student enrolled.");
+    }
+
+    private static void assignGrade() {
+        System.out.print("Student ID: ");
+        String sid = scanner.nextLine();
+        Student s = students.stream().filter(st -> st.getId().equals(sid)).findFirst().orElse(null);
+        if (s == null) { System.out.println("Student not found."); return; }
+
+        System.out.print("Course Name: ");
+        String cname = scanner.nextLine();
+        Enrollment e = s.getEnrollments().stream().filter(en -> en.toString().startsWith(cname)).findFirst().orElse(null);
+        if (e == null) { System.out.println("Enrollment not found."); return; }
+
+        System.out.print("Grade: ");
+        try {
+            double grade = Double.parseDouble(scanner.nextLine());
+            e.assignGrade(grade);
+
+            Notification email = new EmailNotification();
+            Notification sms = new SMSNotification();
+            email.send("Grade assigned: " + grade + " for " + cname);
+            sms.send("Grade assigned: " + grade + " for " + cname);
+
+            System.out.println("Grade assigned.");
+        } catch (NumberFormatException ex) {
+            System.out.println("Invalid grade.");
+        }
+    }
+
+    private static void displayUsers() {
+        System.out.println("\n--- Students ---");
+        for (Student s : students) s.displayInfo();
+        System.out.println("\n--- Professors ---");
+        for (Professor p : professors) p.displayInfo();
+    }
+
+    private static void saveData() {
+        FileManager.save(students, "students.dat");
+        FileManager.save(professors, "professors.dat");
+        FileManager.save(courses, "courses.dat");
+        System.out.println("Data saved.");
+    }
+
+    private static void loadData() {
+        Object s = FileManager.load("students.dat");
+        Object p = FileManager.load("professors.dat");
+        Object c = FileManager.load("courses.dat");
+        if (s != null) students = (List<Student>) s;
+        if (p != null) professors = (List<Professor>) p;
+        if (c != null) courses = (List<Course>) c;
+    }
+}
